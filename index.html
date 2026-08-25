@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Receita em 1 Minuto</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:#fff8f0;color:#29231f}
+.wrap{max-width:720px;margin:auto;padding:20px}.hero{background:#ff6b35;color:#fff;border-radius:24px;padding:28px 22px;text-align:center}
+.hero h1{margin:0 0 8px;font-size:32px}.hero p{margin:0;line-height:1.5}
+.card{background:#fff;border-radius:20px;padding:22px;margin-top:18px;box-shadow:0 6px 24px #0001}
+label{display:block;font-weight:700;margin:16px 0 7px}input,select{width:100%;padding:14px;border:1px solid #ddd;border-radius:12px;font-size:16px}
+button{width:100%;padding:16px;border:0;border-radius:14px;background:#ff6b35;color:#fff;font-size:17px;font-weight:700;margin-top:18px}
+button:disabled{opacity:.6}.secondary{background:#29231f}.hidden{display:none}.result{line-height:1.6}.result h2{color:#ff6b35}.badge{display:inline-block;background:#fff0e7;border-radius:20px;padding:6px 10px;margin:3px;font-size:13px}.small{font-size:12px;color:#777;text-align:center}
+.error{background:#ffe8e3;color:#8b2417;padding:12px;border-radius:12px;margin-top:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<section class="hero"><div style="font-size:42px">🍳</div><h1>Receita em 1 Minuto</h1>
+<p>Diga o que você tem em casa e a IA cria uma receita simples para você.</p></section>
+
+<section class="card" id="formCard">
+<label>🥕 Quais ingredientes você tem?</label>
+<input id="ingredients" maxlength="500" placeholder="Ex.: frango, arroz, tomate e queijo">
+<label>👥 Para quantas pessoas?</label>
+<select id="people"><option>1 pessoa</option><option selected>2 pessoas</option><option>3 pessoas</option><option>4 pessoas</option><option>5 ou mais pessoas</option></select>
+<label>⏱️ Quanto tempo você tem?</label>
+<select id="time"><option>Até 15 minutos</option><option selected>Até 30 minutos</option><option>Até 1 hora</option></select>
+<label>🍽️ Qual refeição?</label>
+<select id="meal"><option>Qualquer uma</option><option>Café da manhã</option><option>Almoço</option><option>Jantar</option><option>Lanche</option><option>Sobremesa</option></select>
+<button id="btn" onclick="gerar()">🔥 GERAR MINHA RECEITA</button>
+<div id="msg"></div>
+<p class="small">Protótipo com IA. A resposta é apenas informativa; confirme alergias e segurança dos alimentos.</p>
+</section>
+
+<section class="card hidden" id="resultCard">
+<div id="result" class="result"></div>
+<button class="secondary" onclick="nova()">← Criar outra receita</button>
+</section>
+</div>
+<script>
+async function gerar(){
+ const ingredients=document.getElementById('ingredients').value.trim();
+ if(!ingredients){showMsg('Digite pelo menos um ingrediente.');return}
+ const btn=document.getElementById('btn'); btn.disabled=true; btn.textContent='⏳ Criando sua receita...'; clearMsg();
+ try{
+   const res=await fetch('/api/recipe',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({ingredients,people:document.getElementById('people').value,time:document.getElementById('time').value,meal:document.getElementById('meal').value})});
+   const data=await res.json();
+   if(!res.ok) throw new Error(data.error||'Não foi possível gerar a receita.');
+   document.getElementById('result').innerHTML=markdownToHtml(data.text||'');
+   document.getElementById('formCard').classList.add('hidden');
+   document.getElementById('resultCard').classList.remove('hidden');
+   window.scrollTo({top:0,behavior:'smooth'});
+ }catch(e){showMsg(e.message)}
+ finally{btn.disabled=false;btn.textContent='🔥 GERAR MINHA RECEITA'}
+}
+function nova(){document.getElementById('resultCard').classList.add('hidden');document.getElementById('formCard').classList.remove('hidden')}
+function showMsg(t){document.getElementById('msg').innerHTML='<div class="error">'+escapeHtml(t)+'</div>'}
+function clearMsg(){document.getElementById('msg').innerHTML=''}
+function escapeHtml(s){return s.replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+function markdownToHtml(md){
+ let s=escapeHtml(md);
+ s=s.replace(/^### (.*)$/gm,'<h3>$1</h3>').replace(/^## (.*)$/gm,'<h2>$1</h2>');
+ s=s.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>');
+ s=s.replace(/^\s*[-•] (.*)$/gm,'<li>$1</li>');
+ s=s.replace(/(<li>.*<\/li>\s*)+/gs,m=>'<ul>'+m+'</ul>');
+ s=s.replace(/^\s*(\d+)\.\s+(.*)$/gm,'<div><strong>$1.</strong> $2</div>');
+ return s.replace(/\n{2,}/g,'<br><br>').replace(/\n/g,'<br>');
+}
+</script>
+</body></html>
