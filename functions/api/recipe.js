@@ -1,32 +1,37 @@
 export async function onRequestPost(context) {
-  try {
-    const body = await context.request.json();
+  const json = (data, status = 200) =>
+    new Response(JSON.stringify(data), {
+      status,
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store"
+      }
+    });
 
-    const ingredients = String(body.ingredients || "").trim();
-    const people = String(body.people || "2 pessoas");
-    const time = String(body.time || "Até 30 minutos");
-    const meal = String(body.meal || "Almoço");
+  try {
+    let body;
+
+    try {
+      body = await context.request.json();
+    } catch {
+      return json({ error: "Dados da pesquisa inválidos." }, 400);
+    }
+
+    const ingredients = String(body?.ingredients || "").trim();
+    const people = String(body?.people || "2 pessoas");
+    const time = String(body?.time || "Até 30 minutos");
+    const meal = String(body?.meal || "Almoço");
 
     if (!ingredients) {
-      return new Response(
-        JSON.stringify({ error: "Informe os ingredientes." }),
-        {
-          status: 400,
-          headers: { "Content-Type": "application/json" }
-        }
-      );
+      return json({ error: "Informe os ingredientes." }, 400);
     }
 
     const apiKey = context.env.GEMINI_API_KEY;
 
     if (!apiKey) {
-      return new Response(
-        JSON.stringify({ error: "GEMINI_API_KEY não configurada." }),
-        {
-          status: 500,
-          headers: { "Content-Type": "application/json" }
-        }
-      );
+      return json({
+        error: "GEMINI_API_KEY não configurada no Cloudflare."
+      }, 500);
     }
 
     const prompt = `
@@ -41,6 +46,7 @@ Priorize os ingredientes informados.
 A receita deve ser fácil para iniciantes.
 
 Responda em português do Brasil com:
+
 ## Nome da receita
 Tempo
 Porções
@@ -61,7 +67,11 @@ Dica do chef
           contents: [
             {
               role: "user",
-              parts: [{ text: prompt }]
+              parts: [
+                {
+                  text: prompt
+                }
+              ]
             }
           ],
           generationConfig: {
@@ -71,52 +81,44 @@ Dica do chef
       }
     );
 
-    const data = await response.json();
+    const responseText = await response.text();
+
+    let data;
+
+    try {
+      data = responseText ? JSON.parse(responseText) : null;
+    } catch {
+      return json({
+        error: "A API Gemini retornou uma resposta inválida.",
+        details: responseText || "Resposta vazia."
+      }, 502);
+    }
 
     if (!response.ok) {
-      return new Response(
-        JSON.stringify({
-          error: "Erro na API Gemini.",
-          details: data?.error?.message || "Erro desconhecido"
-        }),
-        {
-          status: response.status,
-          headers: { "Content-Type": "application/json" }
-        }
-      );
+      return json({
+        error: "Erro na API Gemini.",
+        details: data?.error?.message || "Erro desconhecido."
+      }, response.status);
     }
 
     const text =
       data?.candidates?.[0]?.content?.parts
-        ?.map(part => part.text || "")
-        .join("") || "";
+        ?.map(part => part?.text || "")
+        .join("")
+        .trim() || "";
 
     if (!text) {
-      throw new Error("A Gemini não retornou uma receita.");
+      return json({
+        error: "A Gemini não retornou uma receita."
+      }, 502);
     }
 
-    return new Response(
-      JSON.stringify({ text }),
-      {
-        headers: {
-          "Content-Type": "application/json",
-          "Cache-Control": "no-store"
-        }
-      }
-    );
+    return json({ text });
 
   } catch (error) {
-    return new Response(
-      JSON.stringify({
-        error: "Não foi possível gerar a receita.",
-        details: error.message
-      }),
-      {
-        status: 500,
-        headers: {
-          "Content-Type": "application/json"
-        }
-      }
-    );
+    return json({
+      error: "Não foi possível gerar a receita.",
+      details: error?.message || "Erro desconhecido."
+    }, 500);
   }
-}
+        }         
